@@ -14,7 +14,7 @@ WorkProof Verifier is a reusable GenLayer Intelligent Contract primitive for che
 
 ## Deployed contract (added 2026-11-10)
 
-- Network: GenLayer Studionet (chain 61999), deployed from 0x11B9dd6d3129Eb740011b1A948aDCbCB67758a10
+- Network: GenLayer Studionet (chain 61999)
 - Contract address: 0xD974a24a033714a64987539EF13986f63E51d426
 - Deploy transaction: 0x16685e0cbe54741822b9adfa66e57294d1c1b5387c4ebf00ea6e3b2a9fafe2ee
 - Explorer (contract): https://explorer-studio.genlayer.com/address/0xD974a24a033714a64987539EF13986f63E51d426
