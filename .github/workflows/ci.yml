@@ -1,0 +1,47 @@
+# Continuous integration for the WorkProof Verifier contract.
+#
+# Runs on every pull request:
+#   1. genvm-lint checks the contract (nondet placement, method surface).
+#   2. The direct test suite runs the contract in memory with the web and
+#      LLM calls mocked, so it needs no server and no network.
+#
+# The direct-test SDK looks for a release asset named
+# genvm-universal.tar.xz, which recent genvm releases no longer publish,
+# so it fails with HTTP 404 unless the runtime is already cached. The
+# linter downloads the same runtime under its own cache directory first,
+# so the "Prepare direct-test runtime" step copies that tarball into the
+# direct-test cache before pytest runs. Same workaround as README.md.
+
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Lint contract
+        run: genvm-lint check contracts/work_proof_verifier.py
+
+      - name: Prepare direct-test runtime
+        run: |
+          mkdir -p ~/.cache/gltest-direct
+          for f in ~/.cache/genvm-linter/genvm-universal-*.tar.xz; do
+            cp "$f" ~/.cache/gltest-direct/genvm-universal.tar.xz
+          done
+
+      - name: Run direct tests
+        run: pytest tests/direct -v
