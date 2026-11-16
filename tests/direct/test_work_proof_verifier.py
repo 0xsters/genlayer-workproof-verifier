@@ -190,3 +190,171 @@ def test_resolve_twice_reverts(direct_vm, direct_deploy, direct_alice):
 
     with direct_vm.expect_revert("already resolved"):
         contract.resolve_task(0)
+
+
+# --- Validator checks (steward request, GenLayer action needed b80d7319) ---
+#
+# In direct-test mode gl.vm.run_nondet_unsafe runs only the leader and
+# captures the validator; consensus itself is exercised explicitly with
+# direct_vm.run_validator(). Each test below resolves a task with a
+# mocked "validator's own" grading, then feeds a crafted leader result
+# to the captured validator and asserts its True/False answer.
+# pass_score is 70 in every test (see _create).
+
+
+def _grading(verdict, score, met, total):
+    return {
+        "verdict": verdict,
+        "score": score,
+        "criteria_met": met,
+        "criteria_total": total,
+        "summary": "Mocked grading.",
+    }
+
+
+def _capture_validator(direct_vm, direct_deploy, direct_alice, own_grading):
+    """Create a task and resolve it with the mocked grading, so the
+    contract's validator is captured for direct_vm.run_validator()."""
+    contract = _deploy(direct_deploy)
+    direct_vm.sender = direct_alice
+    _create(contract)
+    direct_vm.mock_web(
+        r".*example\.com/work/demo.*",
+        {
+            "status": 200,
+            "body": "<html><body>Contract file, README, and 8 passing tests.</body></html>",
+        },
+    )
+    direct_vm.mock_llm(
+        r".*work acceptance reviewer.*",
+        json.dumps(own_grading),
+    )
+    contract.resolve_task(0)
+    return contract
+
+
+def test_validator_rejects_accepted_below_pass(
+    direct_vm, direct_deploy, direct_alice
+):
+    # Steward's exact example: pass_score 70, leader stores accepted
+    # with score 55 while the validator independently obtains 70. The
+    # old 15-point tolerance alone accepted this (|55 - 70| == 15).
+    _capture_validator(
+        direct_vm, direct_deploy, direct_alice, _grading("accepted", 70, 3, 3)
+    )
+    assert (
+        direct_vm.run_validator(leader_result=_grading("accepted", 55, 3, 3))
+        is False
+    )
+
+
+def test_validator_rejects_rejected_above_pass(
+    direct_vm, direct_deploy, direct_alice
+):
+    # Mirror image: a rejected leader result carrying a score above
+    # pass_score must not be stored either.
+    _capture_validator(
+        direct_vm, direct_deploy, direct_alice, _grading("rejected", 75, 1, 3)
+    )
+    assert (
+        direct_vm.run_validator(leader_result=_grading("rejected", 85, 1, 3))
+        is False
+    )
+
+
+def test_validator_rejects_scores_straddling_pass_score(
+    direct_vm, direct_deploy, direct_alice
+):
+    # Leader 72 and validator 68 are within the 15-point tolerance and
+    # agree on "accepted", but the scores land on opposite sides of
+    # pass_score 70, so there is no consensus about passing.
+    _capture_validator(
+        direct_vm, direct_deploy, direct_alice, _grading("accepted", 68, 3, 3)
+    )
+    assert (
+        direct_vm.run_validator(leader_result=_grading("accepted", 72, 3, 3))
+        is False
+    )
+
+
+def test_validator_accepts_matching_accepted_result(
+    direct_vm, direct_deploy, direct_alice
+):
+    # Happy path must keep working: both sides accepted above pass.
+    _capture_validator(
+        direct_vm, direct_deploy, direct_alice, _grading("accepted", 90, 3, 3)
+    )
+    assert (
+        direct_vm.run_validator(leader_result=_grading("accepted", 92, 3, 3))
+        is True
+    )
+
+
+def test_validator_accepts_matching_rejected_result(
+    direct_vm, direct_deploy, direct_alice
+):
+    # Happy path for rejection: both sides rejected below pass.
+    _capture_validator(
+        direct_vm, direct_deploy, direct_alice, _grading("rejected", 60, 0, 3)
+    )
+    assert (
+        direct_vm.run_validator(leader_result=_grading("rejected", 55, 0, 3))
+        is True
+    )
+
+
+def test_validator_rejects_criteria_total_mismatch(
+    direct_vm, direct_deploy, direct_alice
+):
+    # The old validator never checked criteria_total at all. A leader
+    # total 2 points away from the validator's own total must be
+    # rejected, mirroring the +-1 tolerance on criteria_met.
+    _capture_validator(
+        direct_vm, direct_deploy, direct_alice, _grading("accepted", 92, 3, 5)
+    )
+    assert (
+        direct_vm.run_validator(leader_result=_grading("accepted", 92, 3, 3))
+        is False
+    )
+
+
+def test_validator_rejects_criteria_met_above_total(
+    direct_vm, direct_deploy, direct_alice
+):
+    # Persisted counts must be internally consistent: criteria_met can
+    # never exceed criteria_total.
+    _capture_validator(
+        direct_vm, direct_deploy, direct_alice, _grading("accepted", 92, 3, 3)
+    )
+    assert (
+        direct_vm.run_validator(leader_result=_grading("accepted", 92, 3, 2))
+        is False
+    )
+
+
+def test_validator_rejects_negative_criteria_met(
+    direct_vm, direct_deploy, direct_alice
+):
+    # Counts are bounded below at zero; -1 is within 1 of the
+    # validator's own 0, so only the explicit bound catches it.
+    _capture_validator(
+        direct_vm, direct_deploy, direct_alice, _grading("accepted", 92, 0, 3)
+    )
+    assert (
+        direct_vm.run_validator(leader_result=_grading("accepted", 92, -1, 3))
+        is False
+    )
+
+
+def test_validator_accepts_criteria_counts_within_tolerance(
+    direct_vm, direct_deploy, direct_alice
+):
+    # Counts at the +-1 tolerance edge on both met and total must
+    # still pass, so the fix does not make consensus unreachable.
+    _capture_validator(
+        direct_vm, direct_deploy, direct_alice, _grading("accepted", 92, 2, 3)
+    )
+    assert (
+        direct_vm.run_validator(leader_result=_grading("accepted", 92, 3, 4))
+        is True
+    )
