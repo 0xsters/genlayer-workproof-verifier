@@ -10,7 +10,7 @@ Form: Submit Contribution (portal.genlayer.foundation)
 
 ## Notes / Description (paste exactly, under the 1,000 character limit)
 
-WorkProof Verifier is a reusable GenLayer Intelligent Contract primitive for checking submitted work against written acceptance criteria. A submitter registers a task, its criteria, an evidence URL, and a pass score. Validators independently fetch the evidence and grade it; the verdict is stored only when validators agree under a custom equivalence rule: the verdict must match exactly, the score must be within 15 points, and the criteria met count within 1. It uses real GenLayer consensus logic: web rendering, structured LLM grading, and run_nondet_unsafe with a custom validator. It includes a double-resolution guard, input validation, readable source, 9 passing direct tests, and full documentation, so other builders can reuse it for bounties, contributions, and agent marketplaces.
+WorkProof Verifier is a reusable GenLayer Intelligent Contract primitive for checking submitted work against written acceptance criteria. A submitter registers a task, its criteria, an evidence URL, and a pass score. Validators independently fetch the evidence and grade it; the verdict is stored only when validators agree under a custom equivalence rule: the verdict must match exactly, the score must be within 15 points, and the criteria counts within 1. The rule was strengthened after steward feedback: an accepted result must score at or above pass_score and a rejected result below it, on both the leader's and the validator's side, and the persisted criteria counts must be non-negative with criteria_met never above criteria_total. It includes a double-resolution guard, input validation, readable source, 18 passing direct tests, and full documentation, so other builders can reuse it for bounties, contributions, and agent marketplaces.
 
 ## Deployed contract (added 2026-11-10)
 
@@ -28,4 +28,9 @@ Portal evidence to attach:
 ## Verification evidence (already run locally)
 
 - `genvm-lint check contracts/work_proof_verifier.py`: lint passed (3 checks), validation passed, contract WorkProofVerifier, 4 methods (2 view, 2 write).
-- `pytest tests/direct -v`: 9 passed.
+- `pytest tests/direct -v`: 18 passed (9 original tests + 9 validator tests added for the steward request: accepted-below-pass, rejected-above-pass, scores straddling pass_score, criteria total mismatch, criteria_met above total, negative criteria_met, and two tolerance happy paths).
+- The 6 new rejection tests were run against the ORIGINAL contract first and failed there, proving they exercise the fix; they pass on the corrected contract.
+
+## Redeploy pending (needs the owner)
+
+- The deployed contract above (0xD974...) is still the OLD version. After this fix is pushed to GitHub, the owner must redeploy to Studionet via GenLayer Studio and update the address + deploy transaction in this file before responding to the steward. Do not respond on the portal until the deployed source matches this corrected repository.
