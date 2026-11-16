@@ -46,6 +46,15 @@ resolve_task(task_id)                                    # non-deterministic blo
         |                   verdict must match exactly
         |                   score must be within 15 points
         |                   criteria_met must be within 1
+        |                   criteria_total must be within 1
+        |                   verdict and score must agree about
+        |                   pass_score: accepted means score at or
+        |                   above pass_score, rejected means below
+        |                   it, on both the leader's and the
+        |                   validator's side of the threshold
+        |                   criteria counts must be non-negative
+        |                   and criteria_met must not exceed
+        |                   criteria_total
         |
         v
 store {status: "resolved", verdict, score, criteria_met, criteria_total, summary}
