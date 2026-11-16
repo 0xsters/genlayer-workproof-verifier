@@ -171,10 +171,41 @@ Respond with ONLY a JSON object, no prose and no markdown:
             try:
                 leader_score = int(leader.get("score", 0))
                 leader_met = int(leader.get("criteria_met", 0))
+                leader_total = int(leader.get("criteria_total", 0))
             except (TypeError, ValueError):
                 return False
+            leader_verdict = str(leader.get("verdict", "")).strip().lower()
+            # A stored verdict must agree with its own score about the
+            # pass mark: an accepted result cannot score below
+            # pass_score, and a rejected result cannot score at or
+            # above it. The 15-point tolerance alone could otherwise
+            # store an accepted score of 55 against pass_score 70 when
+            # a validator independently obtains 70.
+            if leader_verdict == "accepted" and leader_score < pass_score:
+                return False
+            if leader_verdict == "rejected" and leader_score >= pass_score:
+                return False
+            # The validator's own independent score must land on the
+            # same side of pass_score as the leader's verdict, so
+            # consensus cannot straddle the threshold.
+            if leader_verdict in ("accepted", "rejected"):
+                if (own["score"] >= pass_score) != (
+                    leader_score >= pass_score
+                ):
+                    return False
+            # Persisted criteria counts are independently bound and
+            # internally consistent: each count is non-negative,
+            # criteria_met never exceeds criteria_total, and the total
+            # is within 1 of the validator's own total, mirroring the
+            # existing +-1 tolerance on criteria_met.
+            if leader_met < 0 or leader_total < 0:
+                return False
+            if leader_met > leader_total:
+                return False
+            if abs(leader_total - own["criteria_total"]) > 1:
+                return False
             return (
-                leader.get("verdict") == own["verdict"]
+                leader_verdict == own["verdict"]
                 and abs(leader_score - own["score"]) <= 15
                 and abs(leader_met - own["criteria_met"]) <= 1
             )
